@@ -1,0 +1,6 @@
+{
+  "name": "nimbustask-lambda",
+  "private": true,
+  "type": "module",
+  "description": "Root package.json for Lambda task root so workspace resolution and ESM imports work."
+}

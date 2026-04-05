@@ -1,0 +1,145 @@
+openapi: 3.0.3
+info:
+  title: NimbusTask API
+  version: 0.1.0
+  description: Serverless task management API (JWT via Amazon Cognito in AWS deployments).
+servers:
+  - url: https://{apiId}.execute-api.{region}.amazonaws.com/{stage}
+    variables:
+      apiId:
+        default: your-api-id
+      region:
+        default: us-east-1
+      stage:
+        default: prod
+paths:
+  /health:
+    get:
+      summary: Liveness check
+      security: []
+      responses:
+        "200":
+          description: OK
+  /teams:
+    post:
+      summary: Create team
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+      responses:
+        "201":
+          description: Created
+    get:
+      summary: List teams for current user
+      responses:
+        "200":
+          description: OK
+  /projects:
+    post:
+      summary: Create project in a team
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [teamId, name]
+              properties:
+                teamId:
+                  type: string
+                  format: uuid
+                name:
+                  type: string
+                description:
+                  type: string
+      responses:
+        "201":
+          description: Created
+    get:
+      summary: List projects for current user
+      responses:
+        "200":
+          description: OK
+  /tasks:
+    post:
+      summary: Create task (MongoDB document)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [projectId, title]
+              properties:
+                projectId:
+                  type: string
+                  format: uuid
+                title:
+                  type: string
+                status:
+                  type: string
+                  enum: [todo, in_progress, done, blocked]
+                assigneeUserId:
+                  type: string
+                  nullable: true
+                metadata:
+                  type: object
+      responses:
+        "201":
+          description: Created
+    get:
+      summary: List tasks for project
+      parameters:
+        - in: query
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: OK
+  /tasks/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Get task
+      responses:
+        "200":
+          description: OK
+        "404":
+          description: Not found
+    patch:
+      summary: Update task
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: OK
+    delete:
+      summary: Delete task
+      responses:
+        "204":
+          description: Deleted
+components:
+  securitySchemes:
+    cognitoJwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+security:
+  - cognitoJwt: []

@@ -1,0 +1,30 @@
+{
+  "name": "nimbustask",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "infra"
+  ],
+  "scripts": {
+    "build": "npm run build -w @nimbustask/shared && npm run build -w @nimbustask/api && npm run build -w nimbustask-infra",
+    "synth": "npm run build && npm run synth -w nimbustask-infra",
+    "migrate:pg": "tsx scripts/run-pg-init.ts",
+    "mongo:indexes": "tsx scripts/mongo-index-stats.ts",
+    "lint": "eslint .",
+    "test": "npm run test --workspaces --if-present",
+    "dev": "npm run dev -w @nimbustask/api"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "eslint": "^9.17.0",
+    "mongodb": "^6.12.0",
+    "pg": "^8.13.1",
+    "tsx": "^4.19.2",
+    "typescript-eslint": "^8.19.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

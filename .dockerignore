@@ -1,0 +1,15 @@
+node_modules
+**/node_modules
+cdk.out
+**/cdk.out
+.git
+**/.git
+.cursor
+**/.cursor
+dist
+**/dist
+*.md
+.env
+.env.*
+coverage
+loadtests

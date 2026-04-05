@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.cdk.staging/
+cdk.out/
+*.js.map
+.env
+.env.*
+!.env.example
+.DS_Store
+coverage/
+*.log
+.aws-sam/
