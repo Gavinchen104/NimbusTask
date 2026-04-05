@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -b",
     "lint": "eslint src --ext .ts",
     "test": "node --import tsx --test src/**/*.test.ts",
     "dev": "node --import tsx src/dev-server.ts"

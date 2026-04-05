@@ -8,5 +8,6 @@ cdk.out/
 !.env.example
 .DS_Store
 coverage/
+*.tsbuildinfo
 *.log
 .aws-sam/

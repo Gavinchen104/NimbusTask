@@ -4,6 +4,8 @@ WORKDIR /src
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY packages/shared ./packages/shared
 COPY apps/api ./apps/api
+# Required so `npm ci` sees every workspace in package.json (matches lockfile).
+COPY infra ./infra
 RUN npm ci \
   && npm run build -w @nimbustask/shared \
   && npm run build -w @nimbustask/api
