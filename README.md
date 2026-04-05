@@ -1,14 +1,17 @@
 # NimbusTask
 
-Production-style **serverless task management API** for portfolio and interview discussions: **AWS Lambda** (container image), **HTTP API Gateway**, **Amazon Cognito JWT** authorization, **Aurora Serverless v2 PostgreSQL** (relational teams/projects/users), **MongoDB Atlas** (task documents with indexes), **RDS Proxy**, **DynamoDB** checkpoints for MongoDB change streams, **AWS CDK** (TypeScript), **GitHub Actions** CI, optional **CodePipeline/CodeBuild** deploy pipeline, **k6** load tests, and **CloudWatch** alarms.
+Production-style **serverless task management** stack: **AWS Lambda** (container image), **HTTP API Gateway**, **Amazon Cognito JWT**, **Amazon RDS PostgreSQL**, **MongoDB Atlas**, **DynamoDB** checkpoints for change streams, **AWS CDK**, **GitHub Actions** + optional **CodePipeline/CodeBuild**, **k6** load tests, **React** web UI, and **CloudWatch** alarms.
 
 **Primary region:** `us-east-1` (N. Virginia — low latency to the North Carolina / Durham area; AWS has no Durham region).
+
+**Suggested order:** finish local development, run **CI-quality checks** (`lint`, `test`, `build`), optionally run **k6** against a deployed API, then run **`cdk deploy` last** when you are ready to spend AWS resources. See [docs/PORTFOLIO_ALIGNMENT.md](docs/PORTFOLIO_ALIGNMENT.md) for a honest map between resume bullets and this repo.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  Client[Clients]
+  Web[React_web]
+  Client[Other_clients]
   APIGW[HTTP_API_Gateway]
   Cognito[Cognito_JWT]
   ApiLambda[Api_Lambda_container]
@@ -16,15 +19,14 @@ flowchart LR
   SM[Secrets_Manager]
   CW[CloudWatch_XRay]
   DDB[DynamoDB_checkpoint]
-  Aurora[(Aurora_Serverless_v2_PG)]
-  Proxy[RDS_Proxy]
+  Pg[(RDS_PostgreSQL)]
   Atlas[(MongoDB_Atlas)]
+  Web --> APIGW
   Client --> APIGW
   APIGW --> Cognito
   Cognito --> ApiLambda
   ApiLambda --> SM
-  ApiLambda --> Proxy
-  Proxy --> Aurora
+  ApiLambda --> Pg
   ApiLambda --> Atlas
   CsLambda --> Atlas
   CsLambda --> DDB
@@ -32,30 +34,80 @@ flowchart LR
   CsLambda --> CW
 ```
 
-- **PostgreSQL:** teams, memberships, projects (Drizzle ORM + migrations in [`apps/api/drizzle/0000_init.sql`](apps/api/drizzle/0000_init.sql)).
-- **MongoDB:** `tasks` collection with compound indexes created at runtime ([`apps/api/src/services/tasks.ts`](apps/api/src/services/tasks.ts)).
-- **Change streams:** scheduled Lambda processes the `tasks` change stream with resume tokens in DynamoDB ([`apps/api/src/change-stream-handler.ts`](apps/api/src/change-stream-handler.ts)).
+- **PostgreSQL:** teams, memberships, projects (Drizzle + [`apps/api/drizzle/0000_init.sql`](apps/api/drizzle/0000_init.sql)). **Lambda → RDS** in a private subnet; optional **RDS Proxy** later via `POSTGRES_PROXY_HOST` if your account supports it.
+- **MongoDB:** `tasks` collection + indexes ([`apps/api/src/services/tasks.ts`](apps/api/src/services/tasks.ts)); indexing and sharding **strategy** notes in [docs/DATA_LAYER.md](docs/DATA_LAYER.md).
+- **Change streams:** scheduled Lambda + DynamoDB resume ([`apps/api/src/change-stream-handler.ts`](apps/api/src/change-stream-handler.ts)).
 
 OpenAPI: [`openapi/openapi.yaml`](openapi/openapi.yaml).
 
 ## Prerequisites
 
 - **Node.js 20+**, **npm**
-- **Docker** (for `cdk deploy` with Lambda container images)
-- **AWS account**, **AWS CDK CLI** (`npm install -g aws-cdk`)
-- **MongoDB Atlas** cluster (network access for your NAT egress IPs after deploy)
-- **CDK bootstrap** in the target account/region: `cdk bootstrap aws://ACCOUNT/REGION`
+- **Docker** (only for `cdk deploy` / Lambda container builds)
+- **AWS account** + **CDK CLI** when you deploy (`npm install -g aws-cdk`)
+- **MongoDB Atlas** (allow NAT egress after deploy)
+- **CDK bootstrap** in target account/region: `cdk bootstrap aws://ACCOUNT/REGION`
 
-## Local development
+## Local development — API
 
 1. Copy [`.env.example`](.env.example) to `.env` and set `DATABASE_URL`, `MONGODB_URI`, and `DEV_LOCAL_AUTH=true`.
 2. Apply Postgres DDL: `npm run migrate:pg`
 3. Run the API: `npm run dev`  
    Use headers `X-Dev-User-Id` and optional `X-Dev-User-Email` instead of Cognito.
 
-## Deploy (CDK)
+## Web UI (React)
 
-From the repo root:
+From repo root:
+
+```bash
+npm ci
+cd apps/web
+cp .env.example .env
+# Point VITE_API_URL at local API (e.g. http://localhost:3000) and set VITE_DEV_* for header auth, or set Cognito IDs for a deployed stack.
+npm run dev
+```
+
+- **Local:** with `VITE_DEV_LOCAL_AUTH=true`, the UI sends dev headers matching the API dev server (no Cognito).
+- **AWS:** set `VITE_USER_POOL_ID` and `VITE_USER_POOL_CLIENT_ID` from CDK outputs and sign in with a Cognito user (same region as the pool).
+
+Build: `npm run build -w @nimbustask/web` (static files in `apps/web/dist` — deploy to S3/CloudFront or Amplify Hosting separately).
+
+## Quality gates (before deploy)
+
+Same commands as CI:
+
+```bash
+npm ci
+npm run lint
+npm run test
+npm run build
+```
+
+Optional pipeline: [`infra/lib/pipeline-stack.ts`](infra/lib/pipeline-stack.ts) runs **lint → test → synth → cdk deploy** when you connect GitHub via CodeStar.
+
+## Load testing (k6)
+
+Install [k6](https://k6.io/). `/health` is unauthenticated:
+
+```bash
+export API_BASE_URL="https://YOUR_ID.execute-api.us-east-1.amazonaws.com"
+k6 run loadtests/load.js
+```
+
+Peak stage targets **on the order of 2,000+ requests/minute** (see comments in [`loadtests/load.js`](loadtests/load.js)); confirm in k6 summary and CloudWatch.
+
+## Resume / interview framing
+
+- **Serverless + containers:** API image from [`docker/Dockerfile`](docker/Dockerfile).
+- **Multi-DB:** Postgres + MongoDB; **change streams** for async validation paths.
+- **CI/CD:** GitHub Actions + optional CodePipeline/CodeBuild; JWT via Cognito.
+- **Honesty:** Availability %, latency %, and “50% faster deploys” need **your** metrics — see [docs/PORTFOLIO_ALIGNMENT.md](docs/PORTFOLIO_ALIGNMENT.md).
+
+---
+
+## Deploy (last step)
+
+Use this when the app is ready and you accept AWS charges.
 
 ```bash
 npm ci
@@ -66,15 +118,13 @@ npx cdk deploy NimbusStack
 
 After deploy:
 
-1. **Update the MongoDB secret** in AWS Secrets Manager (replace the placeholder Atlas URI JSON `{"uri":"..."}`).
-2. **Allow Atlas network access** from your VPC NAT egress IPs (VPC console → NAT Gateway → Elastic IP → allow in Atlas IP Access List), or use Atlas VPC peering / Private Endpoint for production-style networking.
-3. **Run Postgres init** against the **RDS Proxy** endpoint using the master secret (same JSON format as Lambda; set `POSTGRES_PROXY_HOST` to the proxy hostname when using the AWS-generated secret that points at the cluster hostname). For first-time schema, use [`scripts/run-pg-init.ts`](scripts/run-pg-init.ts) with `DATABASE_URL` built from the proxy host and credentials from Secrets Manager.
+1. **MongoDB secret** in Secrets Manager — replace placeholder Atlas URI `{"uri":"..."}`.
+2. **Atlas network access** — NAT Gateway Elastic IP on the allow list (or peering / Private Endpoint for production-style setups).
+3. **Postgres schema** — build `DATABASE_URL` from the RDS secret (`host`, `port`, `username`, `password`, `dbname`) and run [`scripts/run-pg-init.ts`](scripts/run-pg-init.ts).
 
-Outputs include **HttpApiUrl**, **UserPoolId**, **UserPoolClientId**, and secret ARNs.
+Stack outputs: **HttpApiUrl**, **UserPoolId**, **UserPoolClientId**, secret ARNs. Point the web app’s `VITE_*` variables at these values.
 
 ### Optional: CodePipeline stack
-
-Create a [CodeStar connection](https://docs.aws.amazon.com/dtconsole/latest/userguide/connections.html) to GitHub, then:
 
 ```bash
 cd infra
@@ -84,18 +134,11 @@ npx cdk deploy NimbusPipelineStack \
   -c githubBranch=main
 ```
 
-The pipeline definition lives in [`infra/lib/pipeline-stack.ts`](infra/lib/pipeline-stack.ts). Tighten IAM on the CodeBuild role for real accounts.
+Tighten IAM on the CodeBuild role for production accounts.
 
-## Load testing (k6)
+### Multi-region (repeat deploy)
 
-Install [k6](https://k6.io/). The health route is unauthenticated:
-
-```bash
-export API_BASE_URL="https://YOUR_ID.execute-api.us-east-1.amazonaws.com"
-k6 run loadtests/load.js
-```
-
-Stages ramp VUs to exercise **>2,000 requests/minute** class traffic; tune `stages` in [`loadtests/load.js`](loadtests/load.js) and watch **Lambda** and **API Gateway** metrics in CloudWatch.
+See [docs/MULTI_REGION.md](docs/MULTI_REGION.md).
 
 ## Teardown
 
@@ -104,15 +147,7 @@ cd infra
 npx cdk destroy NimbusStack
 ```
 
-Destroy **fails** if deletion protection or snapshots are retained; empty the S3 bootstrap bucket if needed. Remove Atlas IP rules you added for testing.
-
-## Resume / interview framing
-
-- **Serverless + containers:** API runs as a **container image** built by [`docker/Dockerfile`](docker/Dockerfile) (ECR asset from CDK).
-- **Multi-DB:** Postgres for relational invariants; MongoDB for flexible task payloads, indexes, and **change streams** for async validation.
-- **Ops:** **RDS Proxy** for connection pooling to Aurora; **Powertools** logging/metrics/tracing in Lambdas; **CloudWatch alarms** on Lambda errors and duration.
-- **CI/CD:** **GitHub Actions** for PR quality gates; **CodePipeline + CodeBuild** optional for mainline deploys.
-- **Honesty:** Quote **availability** and **latency** improvements only from **your own** CloudWatch/load-test results, not as universal SLAs.
+Resolve deletion protection / snapshots if needed; remove Atlas IP rules used for testing.
 
 ## License
 

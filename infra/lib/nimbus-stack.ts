@@ -42,33 +42,30 @@ export class NimbusStack extends cdk.Stack {
       ],
     });
 
-    const dbSg = new ec2.SecurityGroup(this, "AuroraSg", { vpc });
+    const dbSg = new ec2.SecurityGroup(this, "PostgresSg", { vpc });
 
-    const cluster = new rds.DatabaseCluster(this, "Aurora", {
-      engine: rds.DatabaseClusterEngine.auroraPostgres({
-        version: rds.AuroraPostgresEngineVersion.VER_16_4,
+    // Aurora Serverless v2 and RDS Proxy are blocked on some AWS accounts ("free plan").
+    // Standard RDS PostgreSQL with Lambda connecting directly to the instance endpoint deploys on those accounts.
+    const postgres = new rds.DatabaseInstance(this, "Postgres", {
+      engine: rds.DatabaseInstanceEngine.postgres({
+        version: rds.PostgresEngineVersion.VER_16_4,
       }),
+      instanceType: ec2.InstanceType.of(
+        ec2.InstanceClass.T4G,
+        ec2.InstanceSize.MICRO
+      ),
       vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
-      serverlessV2MinCapacity: 0.5,
-      serverlessV2MaxCapacity: 4,
-      writer: rds.ClusterInstance.serverlessV2("writer"),
       credentials: rds.Credentials.fromGeneratedSecret("nimbusadmin"),
-      defaultDatabaseName: "nimbustask",
+      databaseName: "nimbustask",
+      allocatedStorage: 20,
+      maxAllocatedStorage: 100,
       storageEncrypted: true,
+      multiAz: false,
       removalPolicy: cdk.RemovalPolicy.SNAPSHOT,
       securityGroups: [dbSg],
+      publiclyAccessible: false,
     });
-
-    const proxy = new rds.DatabaseProxy(this, "RdsProxy", {
-      proxyTarget: rds.ProxyTarget.fromCluster(cluster),
-      secrets: [cluster.secret!],
-      vpc,
-      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
-      clientPasswordAuthType: rds.ClientPasswordAuthType.POSTGRES_SCRAM_SHA_256,
-    });
-
-    cluster.connections.allowFrom(proxy, ec2.Port.tcp(5432), "RDS Proxy to Aurora");
 
     const checkpointTable = new dynamodb.Table(this, "ChangeStreamCheckpoint", {
       partitionKey: { name: "pk", type: dynamodb.AttributeType.STRING },
@@ -105,10 +102,10 @@ export class NimbusStack extends cdk.Stack {
     lambdaSg.addEgressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(443), "HTTPS");
     lambdaSg.addEgressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(5432), "Postgres");
 
-    proxy.connections.allowFrom(
+    postgres.connections.allowFrom(
       lambdaSg,
       ec2.Port.tcp(5432),
-      "Lambda to RDS Proxy"
+      "Lambda to PostgreSQL"
     );
 
     const repoRoot = join(__dirname, "..", "..", "..");
@@ -125,8 +122,7 @@ export class NimbusStack extends cdk.Stack {
       securityGroups: [lambdaSg],
       environment: {
         NODE_ENV: "production",
-        POSTGRES_SECRET_ARN: cluster.secret!.secretArn,
-        POSTGRES_PROXY_HOST: proxy.endpoint,
+        POSTGRES_SECRET_ARN: postgres.secret!.secretArn,
         MONGO_SECRET_ARN: mongoSecret.secretArn,
         MONGO_DB_NAME: "nimbustask",
         CHANGE_STREAM_CHECKPOINT_TABLE: checkpointTable.tableName,
@@ -135,7 +131,7 @@ export class NimbusStack extends cdk.Stack {
       logRetention: logs.RetentionDays.ONE_WEEK,
     });
 
-    cluster.secret!.grantRead(apiFn);
+    postgres.secret!.grantRead(apiFn);
     mongoSecret.grantRead(apiFn);
     checkpointTable.grantReadWriteData(apiFn);
 
@@ -245,7 +241,7 @@ export class NimbusStack extends cdk.Stack {
     });
     new cdk.CfnOutput(this, "MongoSecretArn", { value: mongoSecret.secretArn });
     new cdk.CfnOutput(this, "PostgresSecretArn", {
-      value: cluster.secret!.secretArn,
+      value: postgres.secret!.secretArn,
     });
     new cdk.CfnOutput(this, "AlarmTopicArn", { value: alarmTopic.topicArn });
   }

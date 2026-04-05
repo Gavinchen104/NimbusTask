@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc -b",
     "lint": "eslint src --ext .ts",
-    "test": "node --import tsx --test src/**/*.test.ts",
+    "test": "node --import tsx --test src/auth.test.ts src/lib/http.test.ts",
     "dev": "node --import tsx src/dev-server.ts"
   },
   "dependencies": {

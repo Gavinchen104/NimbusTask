@@ -58,7 +58,7 @@ export class PipelineStack extends cdk.Stack {
             commands: ["npm ci"],
           },
           build: {
-            commands: ["npm run synth"],
+            commands: ["npm run lint", "npm test", "npm run synth"],
           },
           post_build: {
             commands: [

@@ -6,7 +6,8 @@
  *   export JWT="eyJ..."
  *   k6 run loadtests/load.js
  *
- * Ramp targets 2000+ requests/minute at peak (adjust stages as needed).
+ * Peak stage uses 120 VUs with ~50ms think time → on the order of 2,000+ HTTP
+ * requests/minute to /health (see k6 summary for exact RPM). Adjust stages as needed.
  */
 import http from "k6/http";
 import { check, sleep } from "k6";

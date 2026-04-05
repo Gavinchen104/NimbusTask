@@ -8,13 +8,14 @@
     "infra"
   ],
   "scripts": {
-    "build": "npm run build -w @nimbustask/shared && npm run build -w @nimbustask/api && npm run build -w nimbustask-infra",
+    "build": "npm run build -w @nimbustask/shared && npm run build -w @nimbustask/api && npm run build -w @nimbustask/web && npm run build -w nimbustask-infra",
     "synth": "npm run build && npm run synth -w nimbustask-infra",
     "migrate:pg": "tsx scripts/run-pg-init.ts",
     "mongo:indexes": "tsx scripts/mongo-index-stats.ts",
     "lint": "eslint .",
     "test": "npm run test --workspaces --if-present",
-    "dev": "npm run dev -w @nimbustask/api"
+    "dev": "npm run dev -w @nimbustask/api",
+    "dev:web": "npm run dev -w @nimbustask/web"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
