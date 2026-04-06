@@ -4,6 +4,7 @@ import type {
   CreateTaskInput,
   PatchTaskInput,
   TaskDoc,
+  TaskPriority,
   TaskStatus,
 } from "@nimbustask/shared";
 
@@ -16,8 +17,21 @@ function tasksCollection(db: Db): Collection<TaskDoc> {
 export async function ensureTaskIndexes(db: Db): Promise<void> {
   const c = tasksCollection(db);
   await c.createIndex({ projectId: 1, status: 1 });
+  await c.createIndex({ projectId: 1, dueDate: 1 });
+  await c.createIndex({ projectId: 1, priority: 1 });
   await c.createIndex({ assigneeUserId: 1, status: 1 });
   await c.createIndex({ updatedAt: -1 });
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export interface ListTasksOptions {
+  status?: TaskStatus;
+  /** Case-insensitive search on title and description */
+  q?: string;
+  limit?: number;
 }
 
 export async function createTask(
@@ -30,7 +44,10 @@ export async function createTask(
     _id: randomUUID(),
     projectId: input.projectId,
     title: input.title,
+    description: input.description,
     status: (input.status ?? "todo") as TaskStatus,
+    priority: (input.priority ?? "medium") as TaskPriority,
+    dueDate: input.dueDate,
     assigneeUserId: input.assigneeUserId ?? null,
     metadata: input.metadata,
     createdAt: now,
@@ -43,13 +60,28 @@ export async function createTask(
 export async function listTasksByProject(
   db: Db,
   projectId: string,
-  limit = 100
+  options: ListTasksOptions = {}
 ): Promise<TaskDoc[]> {
-  return tasksCollection(db)
-    .find({ projectId })
-    .sort({ updatedAt: -1 })
-    .limit(limit)
+  const limit = options.limit ?? 100;
+  const filter: Record<string, unknown> = { projectId };
+  if (options.status) {
+    filter.status = options.status;
+  }
+  if (options.q?.trim()) {
+    const rx = new RegExp(escapeRegex(options.q.trim()), "i");
+    filter.$or = [{ title: rx }, { description: rx }];
+  }
+  const rows = await tasksCollection(db)
+    .find(filter)
+    .limit(500)
     .toArray();
+  rows.sort((a, b) => {
+    const ad = a.dueDate ? new Date(a.dueDate).getTime() : Number.POSITIVE_INFINITY;
+    const bd = b.dueDate ? new Date(b.dueDate).getTime() : Number.POSITIVE_INFINITY;
+    if (ad !== bd) return ad - bd;
+    return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+  });
+  return rows.slice(0, limit);
 }
 
 export async function getTask(db: Db, id: string): Promise<TaskDoc | null> {
@@ -64,10 +96,11 @@ export async function updateTask(
   const existing = await getTask(db, id);
   if (!existing) return null;
   const now = new Date();
-  await tasksCollection(db).updateOne(
-    { _id: id },
-    { $set: { ...patch, updatedAt: now } }
-  );
+  const set: Record<string, unknown> = { updatedAt: now };
+  for (const [k, v] of Object.entries(patch)) {
+    if (v !== undefined) set[k] = v;
+  }
+  await tasksCollection(db).updateOne({ _id: id }, { $set: set });
   return getTask(db, id);
 }
 

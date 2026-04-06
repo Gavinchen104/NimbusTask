@@ -83,9 +83,17 @@ paths:
                   format: uuid
                 title:
                   type: string
+                description:
+                  type: string
                 status:
                   type: string
                   enum: [todo, in_progress, done, blocked]
+                priority:
+                  type: string
+                  enum: [low, medium, high, urgent]
+                dueDate:
+                  type: string
+                  format: date-time
                 assigneeUserId:
                   type: string
                   nullable: true
@@ -103,6 +111,18 @@ paths:
           schema:
             type: string
             format: uuid
+        - in: query
+          name: status
+          required: false
+          schema:
+            type: string
+            enum: [todo, in_progress, done, blocked]
+        - in: query
+          name: q
+          required: false
+          description: Search title and description (case-insensitive)
+          schema:
+            type: string
       responses:
         "200":
           description: OK

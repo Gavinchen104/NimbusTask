@@ -7,6 +7,7 @@ import {
   createTaskSchema,
   createTeamSchema,
   patchTaskSchema,
+  type TaskStatus,
 } from "@nimbustask/shared";
 import { ZodError } from "zod";
 import type { Logger } from "@aws-lambda-powertools/logger";
@@ -14,6 +15,7 @@ import type { Metrics } from "@aws-lambda-powertools/metrics";
 import { resolveAuth, type AuthContext } from "./auth.js";
 import { loadConfig } from "./lib/config.js";
 import { json, parseJson } from "./lib/http.js";
+import type { Db } from "mongodb";
 import { getDb } from "./lib/pg.js";
 import { getMongoDb } from "./lib/mongo.js";
 import * as usersService from "./services/users.js";
@@ -81,10 +83,17 @@ async function dispatch(
   metrics: Metrics
 ): Promise<APIGatewayProxyStructuredResultV2> {
   const db = await getDb();
-  const mongo = await getMongoDb();
-  await tasksService.ensureTaskIndexes(mongo);
-
   const user = await usersService.ensureUser(db, auth.userId, auth.email);
+
+  /** Tasks live in Mongo; teams/projects are Postgres-only. Avoid connecting to Mongo for /teams and /projects. */
+  let mongoCache: Db | null = null;
+  const mongo = async (): Promise<Db> => {
+    if (!mongoCache) {
+      mongoCache = await getMongoDb();
+      await tasksService.ensureTaskIndexes(mongoCache);
+    }
+    return mongoCache;
+  };
 
   if (method === "POST" && path === "/teams") {
     const body = createTeamSchema.parse(parseJson(event.body));
@@ -120,7 +129,7 @@ async function dispatch(
     if (!project) {
       return json(404, { error: "Project not found" });
     }
-    const task = await tasksService.createTask(mongo, body, user.id);
+    const task = await tasksService.createTask(await mongo(), body, user.id);
     metrics.addMetric("TasksCreated", "Count", 1);
     return json(201, serializeTask(task));
   }
@@ -130,6 +139,17 @@ async function dispatch(
     if (!projectId) {
       return json(400, { error: "projectId query parameter required" });
     }
+    const rawStatus = event.queryStringParameters?.status;
+    const q = event.queryStringParameters?.q;
+    const allowed = new Set([
+      "todo",
+      "in_progress",
+      "done",
+      "blocked",
+    ]);
+    if (rawStatus && !allowed.has(rawStatus)) {
+      return json(400, { error: "Invalid status filter" });
+    }
     const project = await projectsService.getProjectIfMember(
       db,
       projectId,
@@ -138,7 +158,10 @@ async function dispatch(
     if (!project) {
       return json(404, { error: "Project not found" });
     }
-    const list = await tasksService.listTasksByProject(mongo, projectId);
+    const list = await tasksService.listTasksByProject(await mongo(), projectId, {
+      status: rawStatus ? (rawStatus as TaskStatus) : undefined,
+      q: q?.trim() || undefined,
+    });
     return json(200, { tasks: list.map(serializeTask) });
   }
 
@@ -146,7 +169,7 @@ async function dispatch(
   if (taskMatch) {
     const taskId = taskMatch[1]!;
     if (method === "GET") {
-      const task = await tasksService.getTask(mongo, taskId);
+      const task = await tasksService.getTask(await mongo(), taskId);
       if (!task) return json(404, { error: "Task not found" });
       const project = await projectsService.getProjectIfMember(
         db,
@@ -158,7 +181,7 @@ async function dispatch(
     }
     if (method === "PATCH") {
       const body = patchTaskSchema.parse(parseJson(event.body));
-      const existing = await tasksService.getTask(mongo, taskId);
+      const existing = await tasksService.getTask(await mongo(), taskId);
       if (!existing) return json(404, { error: "Task not found" });
       const project = await projectsService.getProjectIfMember(
         db,
@@ -166,12 +189,12 @@ async function dispatch(
         user.id
       );
       if (!project) return json(404, { error: "Task not found" });
-      const updated = await tasksService.updateTask(mongo, taskId, body);
+      const updated = await tasksService.updateTask(await mongo(), taskId, body);
       metrics.addMetric("TasksUpdated", "Count", 1);
       return json(200, serializeTask(updated!));
     }
     if (method === "DELETE") {
-      const existing = await tasksService.getTask(mongo, taskId);
+      const existing = await tasksService.getTask(await mongo(), taskId);
       if (!existing) return json(404, { error: "Task not found" });
       const project = await projectsService.getProjectIfMember(
         db,
@@ -179,7 +202,7 @@ async function dispatch(
         user.id
       );
       if (!project) return json(404, { error: "Task not found" });
-      await tasksService.deleteTask(mongo, taskId);
+      await tasksService.deleteTask(await mongo(), taskId);
       metrics.addMetric("TasksDeleted", "Count", 1);
       return json(204, "");
     }
@@ -189,24 +212,32 @@ async function dispatch(
   return json(404, { error: "Not found" });
 }
 
-function serializeTask(t: {
-  _id?: string;
-  projectId: string;
-  title: string;
-  status: string;
-  assigneeUserId: string | null;
-  metadata?: Record<string, unknown>;
-  createdAt: Date;
-  updatedAt: Date;
-}) {
+function serializeTask(t: TaskDocLike) {
   return {
     id: t._id,
     projectId: t.projectId,
     title: t.title,
+    description: t.description,
     status: t.status,
+    priority: t.priority ?? "medium",
+    dueDate: t.dueDate ? new Date(t.dueDate).toISOString() : null,
     assigneeUserId: t.assigneeUserId,
     metadata: t.metadata,
     createdAt: t.createdAt.toISOString(),
     updatedAt: t.updatedAt.toISOString(),
   };
 }
+
+type TaskDocLike = {
+  _id?: string;
+  projectId: string;
+  title: string;
+  description?: string;
+  status: string;
+  priority?: string;
+  dueDate?: Date;
+  assigneeUserId: string | null;
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+};

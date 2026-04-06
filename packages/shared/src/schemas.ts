@@ -2,6 +2,8 @@ import { z } from "zod";
 
 export const taskStatusSchema = z.enum(["todo", "in_progress", "done", "blocked"]);
 
+export const taskPrioritySchema = z.enum(["low", "medium", "high", "urgent"]);
+
 export const createProjectSchema = z.object({
   teamId: z.string().uuid(),
   name: z.string().min(1).max(200),
@@ -15,7 +17,10 @@ export const createTeamSchema = z.object({
 export const createTaskSchema = z.object({
   projectId: z.string().uuid(),
   title: z.string().min(1).max(500),
+  description: z.string().max(8000).optional(),
   status: taskStatusSchema.optional(),
+  priority: taskPrioritySchema.optional(),
+  dueDate: z.coerce.date().optional(),
   assigneeUserId: z.string().min(1).max(128).nullable().optional(),
   metadata: z.record(z.unknown()).optional(),
 });
@@ -23,7 +28,10 @@ export const createTaskSchema = z.object({
 export const patchTaskSchema = z
   .object({
     title: z.string().min(1).max(500).optional(),
+    description: z.string().max(8000).nullable().optional(),
     status: taskStatusSchema.optional(),
+    priority: taskPrioritySchema.nullable().optional(),
+    dueDate: z.union([z.coerce.date(), z.null()]).optional(),
     assigneeUserId: z.string().min(1).max(128).nullable().optional(),
     metadata: z.record(z.unknown()).optional(),
   })

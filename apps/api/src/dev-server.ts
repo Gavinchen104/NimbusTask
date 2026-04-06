@@ -8,6 +8,28 @@ import { lambdaHandler } from "./handler.js";
 
 const port = Number(process.env.PORT ?? "3000");
 
+/** Allow the Vite app (e.g. :5173) to call this dev API from the browser. */
+function applyCors(
+  req: http.IncomingMessage,
+  res: http.ServerResponse
+): void {
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+  } else {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+  }
+  res.setHeader(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PATCH, DELETE, OPTIONS, HEAD"
+  );
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "authorization, content-type, x-dev-user-id, x-dev-user-email"
+  );
+}
+
 function buildEvent(
   method: string,
   url: URL,
@@ -55,6 +77,13 @@ function buildEvent(
 }
 
 const server = http.createServer(async (req, res) => {
+  if (req.method === "OPTIONS") {
+    applyCors(req, res);
+    res.statusCode = 204;
+    res.end();
+    return;
+  }
+
   const chunks: Buffer[] = [];
   for await (const chunk of req) {
     chunks.push(chunk as Buffer);
@@ -83,6 +112,7 @@ const server = http.createServer(async (req, res) => {
 
   const result = await lambdaHandler(event, context);
 
+  applyCors(req, res);
   res.statusCode = result.statusCode ?? 500;
   if (result.headers) {
     for (const [k, v] of Object.entries(result.headers)) {

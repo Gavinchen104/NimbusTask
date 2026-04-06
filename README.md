@@ -43,31 +43,50 @@ OpenAPI: [`openapi/openapi.yaml`](openapi/openapi.yaml).
 ## Prerequisites
 
 - **Node.js 20+**, **npm**
-- **Docker** (only for `cdk deploy` / Lambda container builds)
+- **Docker** (local Postgres + Mongo via [`docker-compose.yml`](docker-compose.yml), and for `cdk deploy` / Lambda images)
 - **AWS account** + **CDK CLI** when you deploy (`npm install -g aws-cdk`)
 - **MongoDB Atlas** (allow NAT egress after deploy)
 - **CDK bootstrap** in target account/region: `cdk bootstrap aws://ACCOUNT/REGION`
 
 ## Local development — API
 
-1. Copy [`.env.example`](.env.example) to `.env` and set `DATABASE_URL`, `MONGODB_URI`, and `DEV_LOCAL_AUTH=true`.
+### Databases (you have not installed Postgres yourself)
+
+Use **Docker** so you do not need a host Postgres or Mongo install:
+
+```bash
+docker compose up -d
+```
+
+This starts **PostgreSQL 16** on host port **`5433`** (mapped into the container as `5432`) and **MongoDB 7** on **`27017`**, with credentials that match [`.env.example`](.env.example) (`nimbus` / `nimbus`, database `nimbustask`). Port **5433** avoids clashes with a **local Postgres** on **5432** (common on macOS). If something else uses `5433` or `27017`, change the left-hand port in `docker-compose.yml` and update `DATABASE_URL` / `MONGODB_URI` in `.env`.
+
+1. Copy [`.env.example`](.env.example) to `.env` (or merge the `DATABASE_URL` / `MONGODB_URI` lines — they should match `docker-compose.yml`).
 2. Apply Postgres DDL: `npm run migrate:pg`
 3. Run the API: `npm run dev`  
    Use headers `X-Dev-User-Id` and optional `X-Dev-User-Email` instead of Cognito.
 
+To stop databases: `docker compose down` (add `-v` to remove data volumes).
+
+**Alternative:** Install Postgres and Mongo on the machine, create a `nimbustask` database, and point `DATABASE_URL` / `MONGODB_URI` at them. Or use a hosted free tier (Neon, Supabase, MongoDB Atlas) and put those URLs in `.env`.
+
 ## Web UI (React)
+
+The **frontend runs on port 5173** (Vite). The **API dev server runs on port 3000** — open **`http://localhost:5173`** for the UI, not `http://localhost:3000` (that URL is JSON from the API only).
 
 From repo root:
 
 ```bash
 npm ci
+# Terminal 1 — API + DB (see Local development — API)
+npm run dev
+
+# Terminal 2 — web UI
 cd apps/web
-cp .env.example .env
-# Point VITE_API_URL at local API (e.g. http://localhost:3000) and set VITE_DEV_* for header auth, or set Cognito IDs for a deployed stack.
+cp .env.example .env   # optional; dev defaults to API at http://localhost:3000
 npm run dev
 ```
 
-- **Local:** with `VITE_DEV_LOCAL_AUTH=true`, the UI sends dev headers matching the API dev server (no Cognito).
+- **Local:** with `VITE_DEV_LOCAL_AUTH=true` in `apps/web/.env`, the UI sends dev headers matching the API dev server (no Cognito). Without a `.env`, dev mode still defaults `VITE_API_URL` to `http://localhost:3000`.
 - **AWS:** set `VITE_USER_POOL_ID` and `VITE_USER_POOL_CLIENT_ID` from CDK outputs and sign in with a Cognito user (same region as the pool).
 
 Build: `npm run build -w @nimbustask/web` (static files in `apps/web/dist` — deploy to S3/CloudFront or Amplify Hosting separately).

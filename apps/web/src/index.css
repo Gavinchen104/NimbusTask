@@ -49,6 +49,12 @@ h2 {
   font-size: 0.9rem;
 }
 
+.small-hint {
+  font-size: 0.8rem;
+  margin: 0 0 0.75rem;
+  line-height: 1.35;
+}
+
 .error {
   color: var(--danger);
   margin: 0.5rem 0;
@@ -174,6 +180,44 @@ button.ghost {
   grid-column: 1 / -1;
 }
 
+.stack-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.stack-form textarea {
+  resize: vertical;
+  min-height: 2.5rem;
+}
+
+.due-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+}
+
+.task-create {
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.task-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.task-toolbar input[type="search"] {
+  flex: 1;
+  min-width: 160px;
+}
+
 .inline {
   display: flex;
   gap: 0.5rem;
@@ -214,6 +258,23 @@ button.ghost {
   background: rgba(91, 159, 212, 0.12);
 }
 
+.list button .proj-line {
+  display: block;
+  font-weight: 600;
+}
+
+.list button .proj-desc {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: var(--muted);
+  margin-top: 0.2rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
 .tasks {
   list-style: none;
   margin: 0;
@@ -226,13 +287,57 @@ button.ghost {
 .tasks li {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.75rem;
   flex-wrap: wrap;
   padding: 0.65rem 0.75rem;
   background: var(--bg);
   border-radius: 8px;
   border: 1px solid var(--border);
+}
+
+.task-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.task-desc {
+  margin: 0.35rem 0 0;
+  font-size: 0.88rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.task-meta {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+}
+
+.pri {
+  margin-left: 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 0.12rem 0.4rem;
+  border-radius: 4px;
+  vertical-align: middle;
+}
+
+.pri-low {
+  background: rgba(139, 156, 179, 0.25);
+  color: var(--muted);
+}
+.pri-medium {
+  background: rgba(91, 159, 212, 0.2);
+  color: var(--accent);
+}
+.pri-high {
+  background: rgba(224, 112, 112, 0.2);
+  color: #e8a0a0;
+}
+.pri-urgent {
+  background: rgba(224, 112, 112, 0.45);
+  color: #fff;
 }
 
 .tasks .actions {

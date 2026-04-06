@@ -7,7 +7,7 @@
     "build": "tsc -b",
     "lint": "eslint src --ext .ts",
     "test": "node --import tsx --test src/auth.test.ts src/lib/http.test.ts",
-    "dev": "node --import tsx src/dev-server.ts"
+    "dev": "node --import tsx --env-file=../../.env src/dev-server.ts"
   },
   "dependencies": {
     "@aws-sdk/client-cloudwatch": "^3.716.0",

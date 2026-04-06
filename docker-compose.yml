@@ -1,0 +1,27 @@
+# Local Postgres + MongoDB for development (no cloud or host install required).
+# Usage: docker compose up -d
+# Then set DATABASE_URL / MONGODB_URI in .env to match the credentials below.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: nimbus
+      POSTGRES_PASSWORD: nimbus
+      POSTGRES_DB: nimbustask
+    # Host 5433 avoids clashing with a local Postgres on 5432 (common on macOS).
+    ports:
+      - "5433:5432"
+    volumes:
+      - nimbus_pg:/var/lib/postgresql/data
+
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - nimbus_mongo:/data/db
+
+volumes:
+  nimbus_pg:
+  nimbus_mongo:

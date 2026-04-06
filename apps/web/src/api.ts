@@ -6,10 +6,11 @@ export function getApiConfig(): {
   devUserId: string;
   devEmail: string;
 } {
-  const base = import.meta.env.VITE_API_URL;
-  if (!base || base.length === 0) {
-    throw new Error("Set VITE_API_URL in apps/web/.env");
-  }
+  const fromEnv = import.meta.env.VITE_API_URL?.trim() ?? "";
+  /** In dev, default to local API so the UI works without copying `.env` first. */
+  const base =
+    fromEnv ||
+    (import.meta.env.DEV ? "http://localhost:3000" : "");
   const dev = import.meta.env.VITE_DEV_LOCAL_AUTH === "true";
   return {
     baseUrl: base.replace(/\/$/, ""),
@@ -24,6 +25,11 @@ export async function apiFetch(
   init: RequestInit & { idToken?: string | null } = {}
 ): Promise<Response> {
   const { baseUrl, dev, devUserId, devEmail } = getApiConfig();
+  if (!baseUrl) {
+    throw new Error(
+      "Set VITE_API_URL in apps/web/.env (required for production builds)"
+    );
+  }
   const url = `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
   const headers = new Headers(init.headers);
   if (init.body !== undefined && !headers.has("Content-Type")) {
