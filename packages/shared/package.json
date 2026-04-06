@@ -12,7 +12,7 @@
     }
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p \"$(dirname \"$npm_package_json\")/tsconfig.json\"",
     "lint": "eslint src --ext .ts",
     "test": "node --import tsx --test src/schemas.test.ts"
   },

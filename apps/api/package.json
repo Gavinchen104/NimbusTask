@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -b \"$(dirname \"$npm_package_json\")/tsconfig.json\"",
     "lint": "eslint src --ext .ts",
     "test": "node --import tsx --test src/auth.test.ts src/lib/http.test.ts",
     "dev": "node --import tsx --env-file=../../.env src/dev-server.ts"
