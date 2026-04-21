@@ -10,4 +10,5 @@ cdk.out/
 coverage/
 *.tsbuildinfo
 *.log
+docs/bench/*.json
 .aws-sam/

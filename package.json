@@ -12,6 +12,7 @@
     "synth": "npm run build && npm run synth -w nimbustask-infra",
     "migrate:pg": "node --import tsx --env-file=.env scripts/run-pg-init.ts",
     "mongo:indexes": "node --import tsx --env-file=.env scripts/mongo-index-stats.ts",
+    "mongo:bench": "node --import tsx --env-file=.env scripts/mongo-bench.ts",
     "lint": "eslint .",
     "test": "npm run test --workspaces --if-present",
     "dev": "npm run dev -w @nimbustask/api",
